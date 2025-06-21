@@ -1,11 +1,22 @@
-﻿using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Wordprocessing;
+﻿
+using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
-using PdfSharp.Drawing;
-using PdfSharp.Pdf;
+using System.Linq;
+using System.Windows.Forms;
+using System.Data;
 using ScottPlot;
 using ScottPlot.TickGenerators;
-using System.Data;
+using DocumentFormat.OpenXml;
+using DocumentFormat.OpenXml.Packaging;
+using OpenXmlWord = DocumentFormat.OpenXml.Wordprocessing;
+using QuestPDF.Fluent;
+using QuestPDF.Helpers;
+using QuestPDF.Infrastructure;
+using QuestDoc = QuestPDF.Fluent.Document;
+using QColors = QuestPDF.Helpers.Colors;
+using QuestPDF.Infrastructure;
 
 namespace Unit4
 {
@@ -15,6 +26,7 @@ namespace Unit4
 
         public Form1()
         {
+            QuestPDF.Settings.License = LicenseType.Community;
             InitializeComponent();
             btnCargarDatos.Click += btnCargarDatos_Click;
             btnGraficar.Click += btnGraficar_Click;
@@ -79,37 +91,39 @@ namespace Unit4
         {
             string ruta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ReporteVentas_OpenXML.docx");
 
-            using (WordprocessingDocument doc = WordprocessingDocument.Create(ruta, DocumentFormat.OpenXml.WordprocessingDocumentType.Document))
+            using (WordprocessingDocument doc = WordprocessingDocument.Create(ruta, WordprocessingDocumentType.Document))
             {
                 MainDocumentPart mainPart = doc.AddMainDocumentPart();
-                mainPart.Document = new Document();
-                Body body = mainPart.Document.AppendChild(new Body());
+                mainPart.Document = new OpenXmlWord.Document();
+                OpenXmlWord.Body body = mainPart.Document.AppendChild(new OpenXmlWord.Body());
 
-                // Título
-                body.AppendChild(new Paragraph(new Run(new Text("REPORTE DE VENTAS"))) { ParagraphProperties = new ParagraphProperties(new Justification() { Val = JustificationValues.Center }) });
+                var title = new OpenXmlWord.Paragraph(new OpenXmlWord.Run(new OpenXmlWord.Text("REPORTE DE VENTAS")))
+                {
+                    ParagraphProperties = new OpenXmlWord.ParagraphProperties(
+                        new OpenXmlWord.Justification() { Val = OpenXmlWord.JustificationValues.Center })
+                };
+                body.Append(title);
 
-                // Tabla
-                Table table = new Table();
-
-                // Encabezados
-                TableRow headerRow = new TableRow();
+                OpenXmlWord.Table table = new OpenXmlWord.Table();
+                OpenXmlWord.TableRow headerRow = new OpenXmlWord.TableRow();
                 string[] headers = { "Producto", "Categoría", "Cantidad", "Precio", "Total" };
                 foreach (string header in headers)
                 {
-                    TableCell cell = new TableCell(new Paragraph(new Run(new Text(header))));
+                    var cell = new OpenXmlWord.TableCell(
+                        new OpenXmlWord.Paragraph(
+                            new OpenXmlWord.Run(new OpenXmlWord.Text(header))));
                     headerRow.Append(cell);
                 }
                 table.Append(headerRow);
 
-                // Datos
                 foreach (var v in ventas)
                 {
-                    TableRow row = new TableRow();
-                    row.Append(new TableCell(new Paragraph(new Run(new Text(v.Producto)))));
-                    row.Append(new TableCell(new Paragraph(new Run(new Text(v.Categoria)))));
-                    row.Append(new TableCell(new Paragraph(new Run(new Text(v.Cantidad.ToString())))));
-                    row.Append(new TableCell(new Paragraph(new Run(new Text(v.Precio.ToString("C"))))));
-                    row.Append(new TableCell(new Paragraph(new Run(new Text(v.Total.ToString("C"))))));
+                    var row = new OpenXmlWord.TableRow();
+                    row.Append(new OpenXmlWord.TableCell(new OpenXmlWord.Paragraph(new OpenXmlWord.Run(new OpenXmlWord.Text(v.Producto)))));
+                    row.Append(new OpenXmlWord.TableCell(new OpenXmlWord.Paragraph(new OpenXmlWord.Run(new OpenXmlWord.Text(v.Categoria)))));
+                    row.Append(new OpenXmlWord.TableCell(new OpenXmlWord.Paragraph(new OpenXmlWord.Run(new OpenXmlWord.Text(v.Cantidad.ToString())))));
+                    row.Append(new OpenXmlWord.TableCell(new OpenXmlWord.Paragraph(new OpenXmlWord.Run(new OpenXmlWord.Text(v.Precio.ToString("C"))))));
+                    row.Append(new OpenXmlWord.TableCell(new OpenXmlWord.Paragraph(new OpenXmlWord.Run(new OpenXmlWord.Text(v.Total.ToString("C"))))));
                     table.Append(row);
                 }
 
@@ -121,28 +135,70 @@ namespace Unit4
 
         private void btnExportarPDF_Click(object sender, EventArgs e)
         {
-            //string ruta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ReporteVentas.pdf");
 
-            //PdfDocument doc = new PdfDocument();
-            //PdfPage page = doc.AddPage();
-            //XGraphics gfx = XGraphics.FromPdfPage(page);
+            try
+            {
+                string ruta = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Desktop), "ReporteVentas_QuestPDF.pdf");
 
-            //XFont titleFont = new XFont("Arial", 16, XFontStyle.Bold);
-            //XFont font = new XFont("Arial", 12, XFontStyle.Regular);
+                QuestDoc.Create(container =>
+                {
+                    container.Page(page =>
+                    {
+                        page.Size(PageSizes.A4);
+                        page.Margin(50);
+                        page.PageColor(QColors.White);
+                        page.DefaultTextStyle(x => x.FontSize(12));
 
-            //int y = 40;
-            //gfx.DrawString("REPORTE DE VENTAS", titleFont, XBrushes.Black, new XPoint(40, y));
-            //y += 30;
+                        page.Header().Text("REPORTE DE VENTAS").SemiBold().FontSize(20).FontColor(QColors.Blue.Medium);
 
-            //foreach (var v in ventas)
-            //{
-            //    string linea = $"{v.Producto} | {v.Categoria} | {v.Cantidad} | {v.Precio:C} | {v.Total:C}";
-            //    gfx.DrawString(linea, font, XBrushes.Black, new XPoint(40, y));
-            //    y += 20;
-            //}
+                        page.Content().Table(table =>
+                        {
+                            table.ColumnsDefinition(columns =>
+                            {
+                                columns.RelativeColumn();
+                                columns.RelativeColumn();
+                                columns.RelativeColumn();
+                                columns.RelativeColumn();
+                                columns.RelativeColumn();
+                            });
 
-            //doc.Save(ruta);
-            //MessageBox.Show("Exportado a PDF correctamente.");
+                            table.Header(header =>
+                            {
+                                header.Cell().Element(CellStyle).Text("Producto").Bold();
+                                header.Cell().Element(CellStyle).Text("Categoría").Bold();
+                                header.Cell().Element(CellStyle).Text("Cantidad").Bold();
+                                header.Cell().Element(CellStyle).Text("Precio").Bold();
+                                header.Cell().Element(CellStyle).Text("Total").Bold();
+                            });
+
+                            foreach (var v in ventas)
+                            {
+                                table.Cell().Element(CellStyle).Text(v.Producto);
+                                table.Cell().Element(CellStyle).Text(v.Categoria);
+                                table.Cell().Element(CellStyle).Text(v.Cantidad.ToString());
+                                table.Cell().Element(CellStyle).Text(v.Precio.ToString("C"));
+                                table.Cell().Element(CellStyle).Text(v.Total.ToString("C"));
+                            }
+
+                            static IContainer CellStyle(IContainer container) =>
+                                container.PaddingVertical(5).PaddingHorizontal(5);
+                        });
+
+                        page.Footer().AlignCenter().Text(x =>
+                        {
+                            x.Span("Generado con QuestPDF - ");
+                            x.Span(DateTime.Now.ToString("dd/MM/yyyy")).SemiBold();
+                        });
+                    });
+                })
+                .GeneratePdf(ruta);
+
+                MessageBox.Show("✅ PDF exportado correctamente en el escritorio.");
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("❌ Error al exportar a PDF:\n\n" + ex.Message, "Error", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
         public class Venta
         {
